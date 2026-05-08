@@ -7,7 +7,7 @@ const Sidebar = () => {
     const navigate = useNavigate()
     const handleLogout = () => {
     localStorage.removeItem("user_session");
-    window.location.href = "/login";
+    window.location.href = "/";
   };
 
   const sidebarItems = [
