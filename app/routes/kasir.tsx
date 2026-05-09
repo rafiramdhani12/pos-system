@@ -46,6 +46,12 @@ function formatRp(n: number): string {
   return "Rp " + Math.round(n || 0).toLocaleString("id-ID");
 }
 
+  const resolveImageSrc = (image: string): string => {
+    if (!image || image === "default.png") return "";
+    if (image.startsWith("http")) return image;
+    return ``;
+  }
+
 // ─────────────────────────────────────────────
 // ProductCard
 // ─────────────────────────────────────────────
@@ -67,10 +73,9 @@ function ProductCard({
       <div className="aspect-square overflow-hidden bg-zinc-700">
         {product.image ? (
           <img
-            src={`/assets/img/${product.image}`}
+            src={resolveImageSrc(product.image)}
             alt={product.nama_product}
             className="w-full h-full object-cover"
-            // FIX: infinite loop kalau fallback juga error — set onerror=null dulu
             onError={(e) => {
               e.currentTarget.onerror = null;
               e.currentTarget.src =
@@ -351,6 +356,8 @@ export default function KasirPage() {
       setIsLoadingProducts(false);
     }
   };
+
+
 
   // Derived
   const subtotal = cart.reduce((s, i) => s + i.harga * i.qty, 0);

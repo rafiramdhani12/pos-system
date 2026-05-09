@@ -13,25 +13,13 @@ import { PackagePlus, Search, Plus, X, ImageIcon, AlertCircle, Pencil } from "lu
 import { createClient } from "~/lib/client";
 import Layout from "~/components/ui/layout";
 
-// ─────────────────────────────────────────────
-// Konstanta kategori — satu sumber kebenaran,
-// dipakai di BatchModal dan EditModal
-// FIX: sebelumnya hardcoded duplikat di tiap tempat
-// ─────────────────────────────────────────────
 const KATEGORI_LIST = [
-  "Makanan Ringan",
+  "Snack",
   "Minuman",
-  "Sembako",
-  "Kebersihan",
-  "perlengkapan dapur",
-  "lainya"
+  "Makanan",
 ];
 
-// ─────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────
 interface BatchItem {
-  kode_product: string;
   nama_product: string;
   kategori: string;
   qty: number;
@@ -44,7 +32,6 @@ interface BatchItem {
 
 interface Product {
   id: number;
-  kode_product: string;
   nama_product: string;
   kategori: string;
   qty: number;
@@ -56,7 +43,6 @@ interface Product {
 
 interface EditForm {
   id: number;
-  kode_product: string;
   nama_product: string;
   kategori: string;
   qty: number;
@@ -70,7 +56,6 @@ interface EditForm {
 // Helpers
 // ─────────────────────────────────────────────
 const defaultItem = (): BatchItem => ({
-  kode_product: "",
   nama_product: "",
   kategori: "",
   qty: 0,
@@ -92,23 +77,44 @@ function readFileAsBase64(file: File): Promise<string> {
 
 function validateImageFile(file: File): string | null {
   if (!file.type.startsWith("image/")) return "File harus berupa gambar (jpg, png, webp, dll)";
-  if (file.size > 2 * 1024 * 1024) return "Ukuran gambar maksimal 2MB";
+  if (file.size > 5 * 1024 * 1024) return "Ukuran gambar maksimal 2MB";
   return null;
 }
 
+// FIX: helper untuk resolve src gambar —
+// kalau image sudah berupa URL Supabase (http), pakai langsung
+// kalau masih nama file lama, fallback ke /assets/img/
+function resolveImageSrc(image: string): string {
+  if (!image || image === "default.png") return "";
+  if (image.startsWith("http")) return image;
+  return `/assets/img/${image}`;
+}
+
+const FALLBACK_SVG =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Crect width='40' height='40' fill='%2327272a'/%3E%3C/svg%3E";
+
 // ─────────────────────────────────────────────
-// Shared: native <select> yang works di dalam Portal
-// FIX: shadcn Select pakai Radix Portal sendiri — kalau
-// dirender di dalam Portal kustom, z-index dan positioning
-// dropdown-nya konflik → dropdown muncul di posisi salah / kelihatan
-// tapi nggak bisa diklik. Solusi: pakai native <select> dengan
-// styling manual yang konsisten dengan design system.
+// Supabase Storage upload
+// ─────────────────────────────────────────────
+async function uploadToSupabase(supabase: any, file: File): Promise<string> {
+  const ext  = file.name.split(".").pop();
+  const name = `${Date.now()}.${ext}`;
+
+  const { error } = await supabase.storage
+    .from("image")
+    .upload(name, file, { upsert: true });
+
+  if (error) throw new Error("Upload gagal: " + error.message);
+
+  const { data } = supabase.storage.from("image").getPublicUrl(name);
+  return data.publicUrl;
+}
+
+// ─────────────────────────────────────────────
+// NativeSelect
 // ─────────────────────────────────────────────
 function NativeSelect({
-  value,
-  onChange,
-  options,
-  placeholder = "Pilih...",
+  value, onChange, options, placeholder = "Pilih...",
 }: {
   value: string;
   onChange: (val: string) => void;
@@ -139,12 +145,10 @@ function NativeSelect({
 }
 
 // ─────────────────────────────────────────────
-// Shared: Image Upload Box
+// ImageUploadBox
 // ─────────────────────────────────────────────
 function ImageUploadBox({
-  preview,
-  onChange,
-  size = "md",
+  preview, onChange, size = "md",
 }: {
   preview: string;
   onChange: (file: File | undefined) => void;
@@ -175,8 +179,6 @@ function ImageUploadBox({
         type="file"
         accept="image/*"
         className="sr-only"
-        // FIX: reset value setelah pilih file yang sama
-        // tanpa ini, kalau user pilih file sama dua kali → onChange tidak terpanggil
         onClick={(e) => { (e.target as HTMLInputElement).value = ""; }}
         onChange={(e) => onChange(e.target.files?.[0])}
       />
@@ -185,7 +187,7 @@ function ImageUploadBox({
 }
 
 // ─────────────────────────────────────────────
-// Shared: useModalKeys
+// useModalKeys
 // ─────────────────────────────────────────────
 function useModalKeys(open: boolean, onClose: () => void, locked: boolean) {
   useEffect(() => {
@@ -201,7 +203,7 @@ function useModalKeys(open: boolean, onClose: () => void, locked: boolean) {
 }
 
 // ─────────────────────────────────────────────
-// Batch Add Modal
+// Batch Modal
 // ─────────────────────────────────────────────
 function BatchModal({
   open, onClose, batchItems, setBatchItems, onSave, isSaving,
@@ -215,7 +217,7 @@ function BatchModal({
 }) {
   useModalKeys(open, onClose, isSaving);
 
-  const addRow = () => setBatchItems((prev) => [...prev, defaultItem()]);
+  const addRow    = () => setBatchItems((prev) => [...prev, defaultItem()]);
   const removeRow = (i: number) => setBatchItems((prev) => prev.filter((_, idx) => idx !== i));
 
   const handleInputChange = (index: number, field: keyof BatchItem, value: unknown) => {
@@ -243,23 +245,13 @@ function BatchModal({
   if (!open) return null;
 
   return createPortal(
-    <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center"
-      aria-modal="true"
-      role="dialog"
-    >
-      <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-        onClick={!isSaving ? onClose : undefined}
-      />
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center" aria-modal="true" role="dialog">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={!isSaving ? onClose : undefined} />
       <div className="relative z-10 flex flex-col w-[90vw] max-w-2xl max-h-[88vh] bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl shadow-black/60">
 
-        {/* Header */}
         <div className="shrink-0 px-6 py-5 border-b border-zinc-800 flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-xl font-black italic uppercase tracking-tight text-white">
-              Batch Inventory Entry
-            </h2>
+            <h2 className="text-xl font-black italic uppercase tracking-tight text-white">Batch Inventory Entry</h2>
             <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">
               Menambah {batchItems.length} Produk Sekaligus
             </p>
@@ -280,73 +272,40 @@ function BatchModal({
           </div>
         </div>
 
-        {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-8 overscroll-contain">
           {batchItems.map((item, index) => (
-            <div
-              key={index}
-              className="relative"
-              style={{ animation: "fadeSlideIn 0.2s ease both" }}
-            >
+            <div key={index} className="relative" style={{ animation: "fadeSlideIn 0.2s ease both" }}>
               <div className="flex justify-between items-center mb-3">
                 <span className="text-[10px] font-black bg-zinc-800 px-2 py-0.5 rounded text-zinc-400 tracking-widest">
                   ITEM #{index + 1}
                 </span>
                 {batchItems.length > 1 && (
-                  <button
-                    onClick={() => removeRow(index)}
-                    className="text-zinc-600 hover:text-red-500 transition-colors p-1 rounded"
-                  >
+                  <button onClick={() => removeRow(index)} className="text-zinc-600 hover:text-red-500 transition-colors p-1 rounded">
                     <X size={15} />
                   </button>
                 )}
               </div>
 
               <div className="grid grid-cols-4 gap-4">
-                {/* Foto */}
                 <div className="col-span-1">
-                  <label className="block text-[10px] font-black uppercase text-zinc-500 mb-1.5 tracking-widest">
-                    Foto
-                  </label>
-                  <ImageUploadBox
-                    preview={item.image_preview}
-                    onChange={(file) => handleImageChange(index, file)}
-                  />
+                  <label className="block text-[10px] font-black uppercase text-zinc-500 mb-1.5 tracking-widest">Foto</label>
+                  <ImageUploadBox preview={item.image_preview} onChange={(file) => handleImageChange(index, file)} />
                 </div>
-
-                {/* Fields */}
                 <div className="col-span-3 space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">
-                        Nama Produk *
-                      </label>
+                      <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">Nama Produk *</label>
                       <Input
-                        placeholder="Contoh: indomie goreng"
+                        placeholder="Contoh: Indomie Goreng"
                         value={item.nama_product}
                         onChange={(e) => handleInputChange(index, "nama_product", e.target.value)}
                         className="bg-zinc-900 border-zinc-800 focus:border-emerald-500 h-9 text-sm text-white"
                       />
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">
-                        SKU / Kode
-                      </label>
-                      <Input
-                        placeholder="PROD-001"
-                        value={item.kode_product}
-                        onChange={(e) => handleInputChange(index, "kode_product", e.target.value)}
-                        className="bg-zinc-900 border-zinc-800 focus:border-emerald-500 h-9 text-sm font-mono text-white"
-                      />
-                    </div>
                   </div>
-
                   <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">
-                        Kategori
-                      </label>
-                      {/* FIX: shadcn Select → NativeSelect karena konflik z-index di dalam Portal */}
+                      <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">Kategori</label>
                       <NativeSelect
                         value={item.kategori}
                         onChange={(val) => handleInputChange(index, "kategori", val)}
@@ -355,24 +314,18 @@ function BatchModal({
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">
-                        Harga (Rp)
-                      </label>
+                      <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">Harga (Rp)</label>
                       <Input
                         type="number"
                         min={0}
                         placeholder="0"
-                        // FIX: value="0" bikin user harus hapus angka dulu sebelum ketik
-                        // Tampilkan string kosong kalau 0
                         value={item.harga === 0 ? "" : item.harga}
                         onChange={(e) => handleInputChange(index, "harga", parseFloat(e.target.value) || 0)}
                         className="bg-zinc-900 border-zinc-800 h-9 text-sm font-bold text-emerald-400"
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">
-                        Stok
-                      </label>
+                      <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">Stok</label>
                       <Input
                         type="number"
                         min={0}
@@ -385,14 +338,11 @@ function BatchModal({
                 </div>
               </div>
 
-              {index < batchItems.length - 1 && (
-                <hr className="mt-6 border-zinc-800 border-dashed" />
-              )}
+              {index < batchItems.length - 1 && <hr className="mt-6 border-zinc-800 border-dashed" />}
             </div>
           ))}
         </div>
 
-        {/* Footer */}
         <div className="shrink-0 px-6 py-4 bg-zinc-950 border-t border-zinc-800">
           <button
             onClick={onSave}
@@ -403,7 +353,6 @@ function BatchModal({
           </button>
         </div>
       </div>
-
       <style>{`
         @keyframes fadeSlideIn {
           from { opacity: 0; transform: translateY(-6px); }
@@ -436,10 +385,7 @@ function EditModal({
     if (err) { alert(err); return; }
     try {
       const base64 = await readFileAsBase64(file);
-      setForm((prev) => prev
-        ? { ...prev, image_preview: base64, image_file: file, image: file.name }
-        : prev
-      );
+      setForm((prev) => prev ? { ...prev, image_preview: base64, image_file: file, image: file.name } : prev);
     } catch { alert("Gagal membaca file gambar"); }
   };
 
@@ -449,67 +395,35 @@ function EditModal({
   if (!open || !form) return null;
 
   return createPortal(
-    <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center"
-      aria-modal="true"
-      role="dialog"
-    >
-      <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-        onClick={!isSaving ? onClose : undefined}
-      />
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center" aria-modal="true" role="dialog">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={!isSaving ? onClose : undefined} />
       <div className="relative z-10 flex flex-col w-[90vw] max-w-lg bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl shadow-black/60">
 
-        {/* Header */}
         <div className="shrink-0 px-6 py-5 border-b border-zinc-800 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-black italic uppercase tracking-tight text-white">
-              Edit Produk
-            </h2>
+            <h2 className="text-lg font-black italic uppercase tracking-tight text-white">Edit Produk</h2>
             <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-0.5">
-              ID #{form.id} · {form.kode_product || "No SKU"}
+              ID #{form.id} 
             </p>
           </div>
-          <button
-            onClick={!isSaving ? onClose : undefined}
-            className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors"
-          >
+          <button onClick={!isSaving ? onClose : undefined} className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors">
             <X size={18} />
           </button>
         </div>
 
-        {/* Body */}
         <div className="p-6 space-y-5 overflow-y-auto max-h-[65vh]">
           <div className="flex gap-4">
             <div className="shrink-0">
-              <label className="block text-[10px] font-black uppercase text-zinc-500 mb-1.5 tracking-widest">
-                Foto
-              </label>
-              <ImageUploadBox
-                preview={form.image_preview}
-                onChange={handleImageChange}
-                size="sm"
-              />
+              <label className="block text-[10px] font-black uppercase text-zinc-500 mb-1.5 tracking-widest">Foto</label>
+              <ImageUploadBox preview={form.image_preview} onChange={handleImageChange} size="sm" />
             </div>
             <div className="flex-1 space-y-3">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">
-                  Nama Produk *
-                </label>
+                <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">Nama Produk *</label>
                 <Input
                   value={form.nama_product}
                   onChange={(e) => update("nama_product", e.target.value)}
                   className="bg-zinc-900 border-zinc-800 focus:border-emerald-500 h-9 text-sm text-white"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">
-                  SKU / Kode
-                </label>
-                <Input
-                  value={form.kode_product}
-                  onChange={(e) => update("kode_product", e.target.value)}
-                  className="bg-zinc-900 border-zinc-800 h-9 text-sm font-mono text-white"
                 />
               </div>
             </div>
@@ -517,10 +431,7 @@ function EditModal({
 
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">
-                Kategori
-              </label>
-              {/* FIX: sama — pakai NativeSelect */}
+              <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">Kategori</label>
               <NativeSelect
                 value={form.kategori}
                 onChange={(val) => update("kategori", val)}
@@ -529,9 +440,7 @@ function EditModal({
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">
-                Harga (Rp)
-              </label>
+              <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">Harga (Rp)</label>
               <Input
                 type="number"
                 min={0}
@@ -541,9 +450,7 @@ function EditModal({
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">
-                Stok
-              </label>
+              <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">Stok</label>
               <Input
                 type="number"
                 min={0}
@@ -555,7 +462,6 @@ function EditModal({
           </div>
         </div>
 
-        {/* Footer */}
         <div className="shrink-0 px-6 py-4 border-t border-zinc-800 flex gap-3">
           <button
             onClick={!isSaving ? onClose : undefined}
@@ -582,15 +488,13 @@ function EditModal({
 // ─────────────────────────────────────────────
 export default function ProductManagement() {
   const supabase = createClient();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [search, setSearch] = useState("");
-
-  const [isBatchOpen, setIsBatchOpen] = useState(false);
+  const [products, setProducts]     = useState<Product[]>([]);
+  const [isLoading, setIsLoading]   = useState(true);
+  const [search, setSearch]         = useState("");
+  const [isBatchOpen, setIsBatchOpen]   = useState(false);
   const [isBatchSaving, setIsBatchSaving] = useState(false);
   const [batchItems, setBatchItems] = useState<BatchItem[]>([defaultItem()]);
-
-  const [editForm, setEditForm] = useState<EditForm | null>(null);
+  const [editForm, setEditForm]     = useState<EditForm | null>(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isEditSaving, setIsEditSaving] = useState(false);
 
@@ -600,9 +504,7 @@ export default function ProductManagement() {
     setIsLoading(true);
     try {
       const { data, error } = await supabase
-        .from("products")
-        .select("*")
-        .order("created_at", { ascending: false });
+        .from("products").select("*").order("created_at", { ascending: false });
       if (error) throw error;
       if (data) setProducts(data);
     } catch (err: any) {
@@ -614,29 +516,24 @@ export default function ProductManagement() {
 
   // ── Batch Save ──
   const handleSaveBatch = async () => {
-    // Validasi semua item
     const invalidIdx = batchItems.findIndex((item) => !item.nama_product.trim());
     if (invalidIdx !== -1) {
       alert(`Nama produk item #${invalidIdx + 1} tidak boleh kosong`);
       return;
     }
 
-    // FIX: cek duplikat kode_product di dalam batch itu sendiri
-    const kodes = batchItems.map((i) => i.kode_product).filter(Boolean);
-    const dupKode = kodes.find((k, i) => kodes.indexOf(k) !== i);
-    if (dupKode) {
-      alert(`SKU "${dupKode}" duplikat di dalam batch. Pastikan tiap SKU unik.`);
-      return;
-    }
-
     setIsBatchSaving(true);
     try {
-      // Strip field UI-only sebelum insert
-      const finalData = batchItems.map(({ image_preview, image_file, ...rest }) => ({
-        ...rest,
-        // Kalau image_file ada tapi belum diupload → tetap pakai "default.png"
-        // TODO: implement upload ke Supabase Storage atau API Route
-      }));
+      // FIX: syntax error sebelumnya — if statement di dalam object literal
+      // Sekarang dipisah: upload dulu, baru construct object
+      const finalData = await Promise.all(
+        batchItems.map(async ({ image_preview, image_file, ...rest }) => {
+          if (image_file) {
+            rest.image = await uploadToSupabase(supabase, image_file);
+          }
+          return rest;
+        })
+      );
 
       const { error } = await supabase.from("products").insert(finalData);
       if (error) throw error;
@@ -645,9 +542,8 @@ export default function ProductManagement() {
       setBatchItems([defaultItem()]);
       await fetchProducts();
     } catch (err: any) {
-      // FIX: parse error code dari Supabase untuk pesan yang lebih informatif
       if (err.code === "23505") {
-        alert("SKU / kode produk sudah ada di database. Gunakan kode yang berbeda.");
+        alert("SKU / kode produk sudah ada di database.");
       } else {
         alert("Gagal menyimpan: " + err.message);
       }
@@ -659,15 +555,15 @@ export default function ProductManagement() {
   // ── Open Edit ──
   const openEdit = (product: Product) => {
     setEditForm({
-      id: product.id,
-      kode_product: product.kode_product ?? "",
+      id:           product.id,
       nama_product: product.nama_product ?? "",
-      kategori: product.kategori ?? "",
-      qty: product.qty ?? 0,
-      harga: product.harga ?? 0,
-      image: product.image ?? "default.png",
-      image_preview: product.image ? `/assets/img/${product.image}` : "",
-      image_file: null,
+      kategori:     product.kategori ?? "",
+      qty:          product.qty ?? 0,
+      harga:        product.harga ?? 0,
+      image:        product.image ?? "default.png",
+      // FIX: resolveImageSrc handles both Supabase URL and legacy /assets/img/
+      image_preview: resolveImageSrc(product.image),
+      image_file:   null,
     });
     setIsEditOpen(true);
   };
@@ -675,41 +571,36 @@ export default function ProductManagement() {
   // ── Save Edit ──
   const handleSaveEdit = async () => {
     if (!editForm) return;
-    if (!editForm.nama_product.trim()) {
-      alert("Nama produk tidak boleh kosong");
-      return;
-    }
+    if (!editForm.nama_product.trim()) { alert("Nama produk tidak boleh kosong"); return; }
 
     setIsEditSaving(true);
     try {
+      // Upload gambar baru kalau ada
+      let finalImage = editForm.image;
+      if (editForm.image_file) {
+        finalImage = await uploadToSupabase(supabase, editForm.image_file);
+      }
+
       const { error } = await supabase
         .from("products")
         .update({
-          kode_product: editForm.kode_product,
           nama_product: editForm.nama_product,
-          kategori: editForm.kategori,
-          qty: editForm.qty,
-          harga: editForm.harga,
-          image: editForm.image,
-          updated_at: new Date().toISOString(),
+          kategori:     editForm.kategori,
+          qty:          editForm.qty,
+          harga:        editForm.harga,
+          image:        finalImage,
+          updated_at:   new Date().toISOString(),
         })
         .eq("id", editForm.id);
 
       if (error) throw error;
 
-      // Optimistic update tanpa refetch
       setProducts((prev) =>
         prev.map((p) =>
           p.id === editForm.id
-            ? {
-                ...p,
-                kode_product: editForm.kode_product,
-                nama_product: editForm.nama_product,
-                kategori: editForm.kategori,
-                qty: editForm.qty,
-                harga: editForm.harga,
-                image: editForm.image,
-              }
+            ? { ...p, nama_product: editForm.nama_product,
+                kategori: editForm.kategori, qty: editForm.qty, harga: editForm.harga,
+                image: finalImage }
             : p
         )
       );
@@ -729,64 +620,38 @@ export default function ProductManagement() {
 
   // ── Toggle Status ──
   const handleToggleStatus = async (id: number, currentStatus: boolean) => {
-    // Optimistic update dulu biar responsif
-    setProducts((prev) =>
-      prev.map((p) => p.id === id ? { ...p, is_active: !currentStatus } : p)
-    );
-
-    const { error } = await supabase
-      .from("products")
-      .update({ is_active: !currentStatus })
-      .eq("id", id);
-
+    setProducts((prev) => prev.map((p) => p.id === id ? { ...p, is_active: !currentStatus } : p));
+    const { error } = await supabase.from("products").update({ is_active: !currentStatus }).eq("id", id);
     if (error) {
-      // Rollback kalau gagal
-      setProducts((prev) =>
-        prev.map((p) => p.id === id ? { ...p, is_active: currentStatus } : p)
-      );
+      setProducts((prev) => prev.map((p) => p.id === id ? { ...p, is_active: currentStatus } : p));
       alert("Gagal update status: " + error.message);
     }
   };
 
   const filteredProducts = products.filter((p) =>
-    p.nama_product?.toLowerCase().includes(search.toLowerCase()) ||
-    p.kode_product?.toLowerCase().includes(search.toLowerCase())
+    p.nama_product?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleCloseBatch = useCallback(() => {
-    if (!isBatchSaving) setIsBatchOpen(false);
-  }, [isBatchSaving]);
-
-  const handleCloseEdit = useCallback(() => {
+  const handleCloseBatch = useCallback(() => { if (!isBatchSaving) setIsBatchOpen(false); }, [isBatchSaving]);
+  const handleCloseEdit  = useCallback(() => {
     if (isEditSaving) return;
     setIsEditOpen(false);
     setEditForm(null);
   }, [isEditSaving]);
 
-  // ─────────────────────────────────────────────
-  // Render
-  // ─────────────────────────────────────────────
   return (
     <Layout>
       <div className="p-6 space-y-6">
-
-        {/* Page Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-black uppercase tracking-tighter italic text-white">
-              Manajemen Barang
-            </h1>
+            <h1 className="text-2xl font-black uppercase tracking-tighter italic text-white">Manajemen Barang</h1>
             <p className="text-xs text-zinc-500 font-bold">Inventory & Stock Control</p>
           </div>
-          <Button
-            onClick={() => setIsBatchOpen(true)}
-            className="bg-emerald-600 hover:bg-emerald-700 gap-2"
-          >
+          <Button onClick={() => setIsBatchOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 gap-2">
             <PackagePlus size={18} /> Batch Input
           </Button>
         </div>
 
-        {/* Tabel */}
         <Card className="bg-zinc-900 border-zinc-800 overflow-hidden">
           <CardHeader className="pb-3 flex flex-row items-center gap-4">
             <div className="relative flex-1">
@@ -813,7 +678,6 @@ export default function ProductManagement() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  // FIX: sebelumnya tidak ada loading state — tabel kosong saat fetch
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-12 text-zinc-500 text-sm">
                       <span className="animate-pulse">Memuat data produk...</span>
@@ -822,7 +686,7 @@ export default function ProductManagement() {
                 ) : filteredProducts.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-12 text-zinc-500 text-sm">
-                      {search ? `Tidak ada produk yang cocok dengan "${search}"` : "Belum ada produk. Tambah lewat Batch Input."}
+                      {search ? `Tidak ada produk cocok dengan "${search}"` : "Belum ada produk. Tambah lewat Batch Input."}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -831,43 +695,31 @@ export default function ProductManagement() {
                       <TableCell className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-zinc-800 rounded overflow-hidden border border-zinc-700 shrink-0">
                           <img
-                            src={`/assets/img/${p.image}`}
+                            // FIX: resolveImageSrc — handle URL Supabase & legacy path
+                            src={resolveImageSrc(p.image) || FALLBACK_SVG}
                             alt={p.nama_product}
                             className="w-full h-full object-cover"
                             onError={(e) => {
                               e.currentTarget.onerror = null;
-                              e.currentTarget.src =
-                                "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Crect width='40' height='40' fill='%2327272a'/%3E%3C/svg%3E";
+                              e.currentTarget.src = FALLBACK_SVG;
                             }}
                           />
                         </div>
                         <div className="min-w-0">
                           <p className="font-bold text-zinc-200 text-sm truncate">{p.nama_product}</p>
-                          <p className="text-[10px] font-mono text-zinc-500 uppercase">{p.kode_product || "—"}</p>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant="secondary"
-                          className="bg-zinc-800 text-zinc-400 text-[10px] uppercase font-black"
-                        >
+                        <Badge variant="secondary" className="bg-zinc-800 text-zinc-400 text-[10px] uppercase font-black">
                           {p.kategori || "—"}
                         </Badge>
                       </TableCell>
-                      <TableCell
-                        className={`text-right font-mono font-bold ${
-                          p.qty === 0 ? "text-red-500" : p.qty <= 5 ? "text-yellow-400" : "text-emerald-400"
-                        }`}
-                      >
+                      <TableCell className={`text-right font-mono font-bold ${
+                        p.qty === 0 ? "text-red-500" : p.qty <= 5 ? "text-yellow-400" : "text-emerald-400"
+                      }`}>
                         {p.qty}
-                        {/* FIX: sebelumnya AlertCircle muncul bahkan saat qty=0
-                            Bedain warning (kurang) vs habis */}
-                        {p.qty === 0 && (
-                          <span className="ml-1 text-[9px] font-black text-red-500">HABIS</span>
-                        )}
-                        {p.qty > 0 && p.qty <= 5 && (
-                          <AlertCircle className="inline ml-1 w-3 h-3 text-yellow-400" />
-                        )}
+                        {p.qty === 0 && <span className="ml-1 text-[9px] font-black text-red-500">HABIS</span>}
+                        {p.qty > 0 && p.qty <= 5 && <AlertCircle className="inline ml-1 w-3 h-3 text-yellow-400" />}
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm text-zinc-300">
                         Rp{(p.harga ?? 0).toLocaleString("id-ID")}
@@ -883,7 +735,6 @@ export default function ProductManagement() {
                         <button
                           onClick={() => openEdit(p)}
                           className="p-1.5 rounded-lg text-zinc-500 hover:text-blue-400 hover:bg-zinc-800 transition-colors"
-                          title="Edit produk"
                         >
                           <Pencil size={15} />
                         </button>
@@ -898,21 +749,14 @@ export default function ProductManagement() {
       </div>
 
       <BatchModal
-        open={isBatchOpen}
-        onClose={handleCloseBatch}
-        batchItems={batchItems}
-        setBatchItems={setBatchItems}
-        onSave={handleSaveBatch}
-        isSaving={isBatchSaving}
+        open={isBatchOpen} onClose={handleCloseBatch}
+        batchItems={batchItems} setBatchItems={setBatchItems}
+        onSave={handleSaveBatch} isSaving={isBatchSaving}
       />
-
       <EditModal
-        open={isEditOpen}
-        onClose={handleCloseEdit}
-        form={editForm}
-        setForm={setEditForm}
-        onSave={handleSaveEdit}
-        isSaving={isEditSaving}
+        open={isEditOpen} onClose={handleCloseEdit}
+        form={editForm} setForm={setEditForm}
+        onSave={handleSaveEdit} isSaving={isEditSaving}
       />
     </Layout>
   );

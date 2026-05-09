@@ -1,11 +1,22 @@
 import React from 'react'
 import { Button } from './button'
-import { History, LayoutDashboard, LogOut, Package, ShoppingCart, User } from 'lucide-react'
-import { Link, NavLink, useNavigate } from 'react-router';
+import {
+  History,
+  LayoutDashboard,
+  LogOut,
+  Package,
+  ShoppingCart,
+  User,
+  X
+} from 'lucide-react'
 
-const Sidebar = () => {
-    const navigate = useNavigate()
-    const handleLogout = () => {
+import { useNavigate } from 'react-router'
+
+const Sidebar = ({ open, setOpen }) => {
+
+  const navigate = useNavigate()
+
+  const handleLogout = () => {
     localStorage.removeItem("user_session");
     window.location.href = "/";
   };
@@ -19,27 +30,59 @@ const Sidebar = () => {
   ];
 
   return (
-   <>
-   <aside className="w-64 border-r border-zinc-800 bg-zinc-900 p-6 hidden md:block">
-        <div className="mb-8">
-          <h2 className="text-xl font-bold text-blue-500">POS SYSTEM</h2>
-        </div>
-        
-        <nav className="space-y-2">
-            {sidebarItems.map((item) => (
-              <Button key={item.href} variant="ghost" className="w-full justify-start gap-2 text-zinc-400 hover:text-white hover:bg-zinc-800" onClick={() => navigate(item.href)}>
-                {item.icon} {item.label}
-              </Button>
-            ))}
-        </nav>
+    <aside
+      className={`
+        fixed md:relative top-0 left-0 z-50
+        w-64 h-screen
+        border-r border-zinc-800
+        bg-zinc-900 p-6
+        transition-transform duration-300
+        ${open ? "translate-x-0" : "-translate-x-full"}
+        md:translate-x-0
+      `}
+    >
 
-        <div className="mt-auto pt-10">
-          <Button onClick={handleLogout} variant="destructive" className="w-full gap-2">
-            <LogOut size={18} /> Keluar
+      {/* CLOSE MOBILE */}
+      <div className="flex justify-end md:hidden mb-4">
+        <button onClick={() => setOpen(false)}>
+          <X />
+        </button>
+      </div>
+
+      <div className="mb-8">
+        <h2 className="text-xl font-bold text-blue-500">
+          POS SYSTEM
+        </h2>
+      </div>
+
+      <nav className="space-y-2">
+        {sidebarItems.map((item) => (
+          <Button
+            key={item.href}
+            variant="ghost"
+            className="w-full justify-start gap-2 text-zinc-400 hover:text-white hover:bg-zinc-800"
+            onClick={() => {
+              navigate(item.href)
+              setOpen(false)
+            }}
+          >
+            {item.icon}
+            {item.label}
           </Button>
-        </div>
-      </aside>
-   </>
+        ))}
+      </nav>
+
+      <div className="pt-10">
+        <Button
+          onClick={handleLogout}
+          variant="destructive"
+          className="w-full gap-2"
+        >
+          <LogOut size={18} />
+          Keluar
+        </Button>
+      </div>
+    </aside>
   )
 }
 

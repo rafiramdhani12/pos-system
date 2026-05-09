@@ -294,7 +294,6 @@ export default function Dashboard() {
                 <ul className="divide-y divide-zinc-800/50">
                   {byCategory.map((row) => {
                     const max = byCategory[0].jumlah;
-                    const pct = Math.round((row.jumlah / max) * 100);
                     return (
                       <li key={row.kategori} className="px-5 py-3 hover:bg-zinc-800/30 transition-colors">
                         <div className="flex items-center justify-between mb-1.5">
@@ -304,13 +303,6 @@ export default function Dashboard() {
                           <span className="text-xs font-black text-blue-400 shrink-0">
                             {row.jumlah} SKU
                           </span>
-                        </div>
-                        {/* Progress bar */}
-                        <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-blue-500 rounded-full transition-all"
-                            style={{ width: `${pct}%` }}
-                          />
                         </div>
                       </li>
                     );
