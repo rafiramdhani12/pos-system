@@ -96,10 +96,6 @@ function ProductCard({
         <p className="text-sm font-semibold text-zinc-100 leading-tight line-clamp-2">
           {product.nama_product}
         </p>
-        <p className={`text-xs ${habis ? "text-red-400" : "text-zinc-400"}`}>
-          Stok: {product.qty}
-          {habis ? " (Habis)" : ""}
-        </p>
         <div className="mt-auto pt-2 flex items-center justify-between gap-2">
           <span className="text-sm font-black text-emerald-400">
             {/* FIX: kalau harga null dari DB, sebelumnya "Rp NaN" */}

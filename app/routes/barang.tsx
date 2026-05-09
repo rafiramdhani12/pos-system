@@ -58,7 +58,7 @@ interface EditForm {
 const defaultItem = (): BatchItem => ({
   nama_product: "",
   kategori: "",
-  qty: 0,
+  qty: 9999,
   harga: 0,
   is_active: true,
   image_preview: "",
@@ -324,14 +324,14 @@ function BatchModal({
                         className="bg-zinc-900 border-zinc-800 h-9 text-sm font-bold text-emerald-400"
                       />
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5 hidden">
                       <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">Stok</label>
                       <Input
                         type="number"
                         min={0}
                         value={item.qty === 0 ? "" : item.qty}
                         onChange={(e) => handleInputChange(index, "qty", parseInt(e.target.value) || 0)}
-                        className="bg-zinc-900 border-zinc-800 h-9 text-sm font-bold text-white"
+                        className="bg-zinc-900 border-zinc-800 h-9 text-sm font-bold text-white hidden"
                       />
                     </div>
                   </div>
@@ -670,7 +670,6 @@ export default function ProductManagement() {
                 <TableRow className="border-zinc-800 hover:bg-transparent">
                   <TableHead className="text-zinc-500 uppercase text-[10px] font-black">Produk</TableHead>
                   <TableHead className="text-zinc-500 uppercase text-[10px] font-black">Kategori</TableHead>
-                  <TableHead className="text-zinc-500 uppercase text-[10px] font-black text-right">Stok</TableHead>
                   <TableHead className="text-zinc-500 uppercase text-[10px] font-black text-right">Harga</TableHead>
                   <TableHead className="text-center text-zinc-500 uppercase text-[10px] font-black">Status</TableHead>
                   <TableHead className="text-center text-zinc-500 uppercase text-[10px] font-black">Aksi</TableHead>
@@ -714,13 +713,7 @@ export default function ProductManagement() {
                           {p.kategori || "—"}
                         </Badge>
                       </TableCell>
-                      <TableCell className={`text-right font-mono font-bold ${
-                        p.qty === 0 ? "text-red-500" : p.qty <= 5 ? "text-yellow-400" : "text-emerald-400"
-                      }`}>
-                        {p.qty}
-                        {p.qty === 0 && <span className="ml-1 text-[9px] font-black text-red-500">HABIS</span>}
-                        {p.qty > 0 && p.qty <= 5 && <AlertCircle className="inline ml-1 w-3 h-3 text-yellow-400" />}
-                      </TableCell>
+                     
                       <TableCell className="text-right font-mono text-sm text-zinc-300">
                         Rp{(p.harga ?? 0).toLocaleString("id-ID")}
                       </TableCell>
