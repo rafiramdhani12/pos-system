@@ -286,7 +286,7 @@ function isiStrukDOM(cart: CartItem[], total: number, payment: number) {
   el.innerHTML = `
     <div style="font-family:monospace;width:300px;margin:0 auto;padding:16px">
       <div style="text-align:center;margin-bottom:12px">
-        <h2 style="font-size:16px;font-weight:bold;margin:0">Toko Arya</h2>
+        <h2 style="font-size:16px;font-weight:bold;margin:0">Kedai Ahmad</h2>
         <p style="font-size:10px;margin:4px 0">${waktu}</p>
       </div>
       <div style="border-top:1px dashed #000;border-bottom:1px dashed #000;padding:8px 0;margin-bottom:8px">
